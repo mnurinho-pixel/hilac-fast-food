@@ -1,0 +1,63 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply font-sans text-slate-900 bg-[#f8f9fa];
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+@media print {
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* The printable receipt should be the only thing visible */
+  #printable-receipt {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 52mm !important;
+    max-width: 52mm !important;
+    margin: 0 !important;
+    padding: 1.5mm !important;
+    background: white !important;
+    z-index: 99999 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    color: black !important;
+    font-size: 8.5pt !important;
+    line-height: 1.2 !important;
+  }
+  #printable-receipt * {
+    color: black !important;
+    box-shadow: none !important;
+    border-color: #333 !important;
+  }
+}
+
+/* Classic Button Style */
+.btn-classic {
+  @apply h-14 rounded-2xl font-bold transition-all active:scale-95 shadow-sm;
+}
+
+.card-classic {
+  @apply bg-white rounded-[2rem] border border-gray-100 shadow-[0_10px_30px_rgba(0,0,0,0.02)];
+}
+

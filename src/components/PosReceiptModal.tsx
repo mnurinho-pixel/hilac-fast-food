@@ -747,8 +747,8 @@ export function PosReceiptModal({
         >
           {activeType === 'kitchen' ? (
             /* Printable Kitchen Slip */
-            <div className="space-y-2 text-black leading-tight">
-              <div className="text-center border-b-2 border-black pb-1.5">
+            <div className="receipt-section space-y-2 text-black leading-tight">
+              <div className="receipt-header text-center border-b-2 border-black pb-1.5">
                 <p className="text-xs font-black uppercase">*** KITCHEN ORDER ***</p>
                 <p className="text-sm font-black uppercase">HILAC FAST FOOD</p>
               </div>
@@ -770,36 +770,40 @@ export function PosReceiptModal({
 
               <div className="py-1 space-y-1.5 border-b-2 border-black">
                 {order.items.map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-1.5 text-sm font-black">
-                    <span className="text-base font-black">[ ] {item.quantity}x</span>
+                  <div key={idx} className="flex items-start gap-1.5 text-xs font-black">
+                    <span className="text-sm font-black">[ ] {item.quantity}x</span>
                     <div className="flex-1 min-w-0">
-                      <span className="text-sm font-black uppercase">{item.name}</span>
+                      <span className="text-xs font-black uppercase break-words">{item.name}</span>
                       {item.notes && (
-                        <p className="text-xs font-bold text-black">* Note: {item.notes}</p>
+                        <p className="text-[10.5px] font-bold text-black">* Note: {item.notes}</p>
                       )}
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="text-center pt-1">
+              <div className="receipt-footer text-center pt-1 space-y-0.5">
                 <p className="text-xs font-black uppercase">Total Items: {totalItemsCount}</p>
                 <p className="text-[10px] font-bold">*** EXPEDITE TO KITCHEN ***</p>
                 <p className="text-[9px]">{formattedDate}</p>
               </div>
+
+              {/* Thermal paper cutter feed buffer */}
+              <div style={{ height: '18mm', minHeight: '18mm', width: '100%', display: 'block' }} />
             </div>
           ) : (
-            /* Printable Customer Receipt */
-            <div className="space-y-1.5 text-black leading-tight">
-              <div className="text-center border-b border-dashed border-black pb-1.5">
+            /* Printable Customer Receipt (Full data, zero cutoff, normal POS size) */
+            <div className="receipt-section space-y-1.5 text-black leading-tight">
+              {/* Header */}
+              <div className="receipt-header text-center border-b border-dashed border-black pb-1.5">
                 <h2 className="text-base font-black uppercase tracking-tight text-black">
                   Hilac Fast Food
                 </h2>
                 <p className="text-[10px] font-bold text-black">Fresh & Tasty Fast Food</p>
-                <div className="mt-1 text-[10px] font-bold text-black">
+                <div className="mt-1 text-[10px] font-bold text-black space-y-0.5">
                   <div className="flex justify-between">
                     <span>Receipt: #{cleanReceiptNumber}</span>
-                    <span>Table: {order.table_number}</span>
+                    <span>Table: #{order.table_number}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Waiter: {order.waiter_name || 'Staff'}</span>
@@ -808,68 +812,87 @@ export function PosReceiptModal({
                 </div>
               </div>
 
-              {/* Items Header */}
-              <div className="border-b border-black pb-0.5 flex justify-between text-[10px] font-black uppercase text-black">
-                <span className="w-8">Qty</span>
-                <span className="flex-1 text-left">Item</span>
-                <span className="text-right">Price</span>
-              </div>
+              {/* Items Table with fixed column widths and clean word wrap (No truncate) */}
+              <table className="receipt-items w-full border-collapse table-fixed text-black">
+                <thead>
+                  <tr className="border-b border-black text-[10px] font-black uppercase">
+                    <th className="w-7 text-left pb-1">Qty</th>
+                    <th className="text-left pb-1 px-1">Item</th>
+                    <th className="w-12 text-right pb-1">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.items.map((item, idx) => {
+                    const itemPrice = item.price ?? 0;
+                    const lineTotal = itemPrice * item.quantity;
+                    return (
+                      <tr key={idx} className="text-xs font-bold leading-tight">
+                        <td className="w-7 align-top py-0.5 font-black">{item.quantity}x</td>
+                        <td className="align-top py-0.5 px-1 break-words">
+                          <div>{item.name}</div>
+                          {item.quantity > 1 && (
+                            <div className="text-[9.5px] font-normal text-slate-700">
+                              @{formatCurrency(itemPrice)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="w-12 align-top py-0.5 text-right font-black whitespace-nowrap">
+                          {formatCurrency(lineTotal)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
 
-              {/* Items */}
-              <div className="space-y-1 py-1 text-xs">
-                {order.items.map((item, idx) => {
-                  const itemPrice = item.price ?? 0;
-                  const lineTotal = itemPrice * item.quantity;
-                  return (
-                    <div key={idx} className="flex justify-between text-xs font-bold text-black">
-                      <span className="w-8 font-black">{item.quantity}x</span>
-                      <span className="flex-1 text-left pr-1 truncate">{item.name}</span>
-                      <span className="text-right font-black">{formatCurrency(lineTotal)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Totals */}
-              <div className="border-t border-dashed border-black pt-1 space-y-0.5 text-xs font-bold text-black">
+              {/* Financial Totals */}
+              <div className="receipt-totals border-t border-dashed border-black pt-1 space-y-0.5 text-xs font-bold text-black">
                 <div className="flex justify-between text-[11px]">
                   <span>SUBTOTAL:</span>
                   <span>{formatCurrency(order.subtotal ?? 0)}</span>
                 </div>
-                <div className="flex justify-between text-[11px]">
-                  <span>TAX (5%):</span>
+                <div className="flex justify-between text-[10.5px]">
+                  <span>TAX / VAT (5%):</span>
                   <span>{formatCurrency(order.vat_amount ?? 0)}</span>
                 </div>
                 <div className="border-t border-black pt-1 flex justify-between text-sm font-black text-black">
-                  <span>TOTAL:</span>
+                  <span>GRAND TOTAL:</span>
                   <span className="text-base font-black">{formatCurrency(order.total_amount ?? 0)}</span>
                 </div>
               </div>
 
-              {/* Merchant Payment Details */}
-              <div className="border-t border-dashed border-black pt-1 text-center">
-                <p className="text-[10px] font-black uppercase text-black">Payment Details</p>
-                <div className="mt-0.5 text-[10px] font-bold text-black space-y-0.5">
-                  <div className="flex justify-between">
-                    <span>Hormuud:</span>
-                    <span className="font-black">623008</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Wallet:</span>
-                    <span className="font-black">571204</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>E-Dahab:</span>
-                    <span className="font-black">147636</span>
+              {/* Merchant Payment Details (Full & Protected) */}
+              <div className="receipt-payment border-t border-dashed border-black pt-1.5 my-1 text-center">
+                <div className="border border-black p-1.5 rounded-sm">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-black mb-1">
+                    Payment Accounts
+                  </p>
+                  <div className="text-xs font-bold text-black space-y-0.5">
+                    <div className="flex justify-between">
+                      <span>Hormuud:</span>
+                      <span className="font-mono font-black">623008</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Wallet:</span>
+                      <span className="font-mono font-black">571204</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>E-Dahab:</span>
+                      <span className="font-mono font-black">147636</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Footer */}
-              <div className="border-t border-dashed border-black pt-1 text-center text-[10px] font-bold text-black">
-                <p>Mahadsanid / Thank you!</p>
+              <div className="receipt-footer border-t border-dashed border-black pt-1 text-center text-[10px] font-bold text-black space-y-0.5">
+                <p className="font-black uppercase text-[11px]">Mahadsanid / Thank you!</p>
                 <p>Please visit Hilac Fast Food again</p>
+                <p className="font-mono tracking-widest pt-0.5">*{cleanReceiptNumber}*</p>
               </div>
+
+              {/* Thermal paper cutter feed buffer: 18mm margin ensures physical tear bar / knife never slices payment or footer */}
+              <div style={{ height: '18mm', minHeight: '18mm', width: '100%', display: 'block' }} />
             </div>
           )}
         </div>,

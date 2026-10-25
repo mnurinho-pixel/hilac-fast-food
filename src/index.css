@@ -22,7 +22,7 @@
 
 @media print {
   @page {
-    margin: 0mm;
+    margin: 0mm !important;
     size: auto;
   }
   /* Hide the entire React application root so nothing pushes content down or creates blank pages */
@@ -46,32 +46,51 @@
     padding: 0 !important;
     width: 100% !important;
     height: auto !important;
+    min-height: 100% !important;
     overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  /* The printable receipt: always visible at (0,0) */
+  /* The printable receipt: always visible, full height, no clipping */
   #printable-receipt {
     display: block !important;
     visibility: visible !important;
     position: static !important;
     margin: 0 auto !important;
-    padding: 2mm 1.5mm !important;
+    padding: 2mm 1.5mm 18mm 1.5mm !important; /* 18mm bottom buffer prevents physical cutter from slicing payment details */
     background: #ffffff !important;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace !important;
     color: #000000 !important;
-    line-height: 1.25 !important;
+    line-height: 1.28 !important;
     box-sizing: border-box !important;
+    height: auto !important;
+    overflow: visible !important;
+    page-break-after: avoid !important;
+    page-break-before: avoid !important;
+    break-after: avoid !important;
+    break-before: avoid !important;
   }
+  /* Standard 80mm thermal roll: 72mm printable area */
   #printable-receipt.paper-80mm {
-    max-width: 78mm !important;
-    width: 78mm !important;
-    font-size: 12px !important;
+    max-width: 72mm !important;
+    width: 72mm !important;
+    font-size: 12.5px !important;
   }
+  /* Standard 58mm thermal roll: 48mm printable area */
   #printable-receipt.paper-58mm {
-    max-width: 54mm !important;
-    width: 54mm !important;
+    max-width: 48mm !important;
+    width: 48mm !important;
     font-size: 11px !important;
+  }
+  /* Ensure sections never get split or truncated across pages */
+  #printable-receipt .receipt-section,
+  #printable-receipt .receipt-header,
+  #printable-receipt .receipt-items,
+  #printable-receipt .receipt-totals,
+  #printable-receipt .receipt-payment,
+  #printable-receipt .receipt-footer {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
   #printable-receipt * {
     color: #000000 !important;

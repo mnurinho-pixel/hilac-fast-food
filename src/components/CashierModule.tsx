@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useTransition } from 'react';
 import { supabase, type Order, type Profile } from '../lib/supabase';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, getCleanOrderNumber, formatReceiptNumber } from '../lib/utils';
 import { printReceipt } from '../lib/printService';
+import { PosReceiptModal, type PosReceiptOrder } from './PosReceiptModal';
 import {
   getCachedOrders,
   syncHistoryOrders,
@@ -22,7 +23,9 @@ import {
   Zap,
   Filter,
   Calendar,
-  X
+  X,
+  ChefHat,
+  Receipt
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -48,7 +51,9 @@ export function CashierModule({ user }: CashierModuleProps) {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [lastSyncDisplay, setLastSyncDisplay] = useState<string>('');
-  const [printingOrder, setPrintingOrder] = useState<OrderWithItems | null>(null);
+  const [selectedReceiptOrder, setSelectedReceiptOrder] = useState<PosReceiptOrder | null>(null);
+  const [receiptModalType, setReceiptModalType] = useState<'customer' | 'kitchen'>('customer');
+  const [receiptModalWidth, setReceiptModalWidth] = useState<'58mm' | '80mm'>('58mm');
 
   // Search & Filter state for History
   const [searchQuery, setSearchQuery] = useState('');
@@ -232,30 +237,30 @@ export function CashierModule({ user }: CashierModuleProps) {
     }
   };
 
-  const handlePrint = async (order: OrderWithItems) => {
-    const isSunmi = await printReceipt({
-      restaurantName: "Hilac Fast Food",
-      tableNumber: order.table_number,
-      waiterName: order.waiter?.full_name || 'System',
-      items: order.items?.map(i => ({
-        name: i.products?.name || 'Unknown',
-        quantity: i.quantity,
-        price: i.unit_price
-      })) || [],
-      subtotal: order.subtotal,
-      tax: order.vat_amount,
-      total: order.total_amount,
-      paymentDetails: { hormuud: "623008", wallet: "571204", edahab: "147636" },
-      orderDate: new Date(order.created_at).toLocaleString()
-    });
-
-    if (!isSunmi) {
-      setPrintingOrder(order);
-      setTimeout(() => {
-        window.print();
-        setPrintingOrder(null);
-      }, 500);
-    }
+  const openReceiptModal = (
+    order: any,
+    type: 'customer' | 'kitchen' = 'customer',
+    width: '58mm' | '80mm' = '58mm'
+  ) => {
+    const formatted: PosReceiptOrder = {
+      id: order.id,
+      table_number: order.table_number,
+      waiter_name: order.waiter?.full_name || order.profiles?.full_name || 'Staff',
+      created_at: order.created_at,
+      items: (order.items || []).map((i: any) => ({
+        name: i.products?.name || i.product_name || i.name || 'Item',
+        quantity: i.quantity || 1,
+        price: i.unit_price ?? i.price ?? 0,
+        notes: i.notes
+      })),
+      subtotal: Number(order.subtotal || 0),
+      vat_amount: Number(order.vat_amount || 0),
+      total_amount: Number(order.total_amount || 0),
+      status: order.status
+    };
+    setSelectedReceiptOrder(formatted);
+    setReceiptModalType(type);
+    setReceiptModalWidth(width);
   };
 
   // Instant local filtering across cached orders
@@ -464,7 +469,12 @@ export function CashierModule({ user }: CashierModuleProps) {
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-4">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Table</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Table</span>
+                        <span className="text-[10px] font-mono font-bold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded-md border border-amber-200/60">
+                          {formatReceiptNumber(order.id)}
+                        </span>
+                      </div>
                       <h3 className="text-2xl font-black text-slate-900">{order.table_number}</h3>
                     </div>
                     <div className="h-10 w-px bg-gray-100" />
@@ -537,36 +547,63 @@ export function CashierModule({ user }: CashierModuleProps) {
                 </AnimatePresence>
 
                 {/* Action buttons */}
-                <div className="flex gap-3 mt-4">
+                <div className="flex flex-wrap items-center gap-2 mt-4">
                   <button
-                    onClick={() => handlePrint(order)}
-                    className="p-3 bg-slate-100 text-slate-700 rounded-2xl hover:bg-slate-200 active:scale-95 transition-all flex items-center gap-2 font-bold text-xs"
-                    title="Print Receipt"
+                    onClick={() => openReceiptModal(order, 'customer', '58mm')}
+                    className="p-2.5 sm:px-3 sm:py-2.5 bg-slate-100 text-slate-800 rounded-xl hover:bg-amber-100 hover:text-amber-900 active:scale-95 transition-all flex items-center gap-1.5 font-bold text-xs"
+                    title="Open Customer Receipt (58mm / 80mm available)"
                   >
-                    <Printer size={18} />
-                    <span>Print</span>
+                    <Receipt size={15} className="text-amber-600" />
+                    <span>Receipt</span>
                   </button>
+
+                  <button
+                    onClick={() => openReceiptModal(order, 'kitchen', '58mm')}
+                    className="p-2.5 sm:px-3 sm:py-2.5 bg-slate-100 text-slate-800 rounded-xl hover:bg-orange-100 hover:text-orange-900 active:scale-95 transition-all flex items-center gap-1.5 font-bold text-xs"
+                    title="Open Kitchen Order Ticket (KOT)"
+                  >
+                    <ChefHat size={15} className="text-orange-600" />
+                    <span>Kitchen</span>
+                  </button>
+
+                  <div className="inline-flex rounded-xl bg-slate-100 p-0.5 border border-slate-200">
+                    <button
+                      onClick={() => openReceiptModal(order, 'customer', '58mm')}
+                      className="px-2 py-1 text-[10px] font-black rounded-lg text-slate-700 hover:bg-white hover:shadow-xs transition-all"
+                      title="Print in 58mm Thermal format"
+                    >
+                      58mm
+                    </button>
+                    <button
+                      onClick={() => openReceiptModal(order, 'customer', '80mm')}
+                      className="px-2 py-1 text-[10px] font-black rounded-lg text-slate-700 hover:bg-white hover:shadow-xs transition-all"
+                      title="Print in 80mm Thermal format"
+                    >
+                      80mm
+                    </button>
+                  </div>
+
                   {order.status === 'pending' && (
                     <>
                       <button
                         onClick={() => handlePayment(order.id, order.table_number, 'paid')}
-                        className="flex-1 bg-green-500 hover:bg-green-600 text-white h-12 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm"
+                        className="flex-1 bg-green-500 hover:bg-green-600 text-white h-11 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm text-xs sm:text-sm"
                       >
-                        <CheckCircle size={18} />
+                        <CheckCircle size={17} />
                         Mark Paid
                       </button>
                       <button
                         onClick={() => handlePayment(order.id, order.table_number, 'cancelled')}
-                        className="px-5 bg-red-50 text-red-600 hover:bg-red-100 h-12 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all"
+                        className="px-3 bg-red-50 text-red-600 hover:bg-red-100 h-11 rounded-xl font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs"
                       >
-                        <XCircle size={18} />
+                        <XCircle size={17} />
                         Cancel
                       </button>
                     </>
                   )}
                   {order.status !== 'pending' && (
-                    <div className="flex-1 flex items-center justify-end text-[11px] text-gray-400 font-mono">
-                      ID: #{order.id.slice(0, 8)}
+                    <div className="flex-1 flex items-center justify-end text-xs text-slate-500 font-bold font-mono">
+                      Receipt: {formatReceiptNumber(order.id)}
                     </div>
                   )}
                 </div>
@@ -576,54 +613,14 @@ export function CashierModule({ user }: CashierModuleProps) {
         </AnimatePresence>
       </div>
 
-      {/* Hidden Print Template (58mm Sunmi V2 Optimized) */}
-      {printingOrder && (
-        <div id="printable-receipt" className="hidden print:block font-mono text-black">
-          <div className="text-center border-b border-dashed border-gray-400 pb-1 mb-1">
-            <h2 className="text-sm font-black uppercase tracking-tight text-black">Hilac Fast Food</h2>
-            <div className="mt-0.5 space-y-0.5 text-[8px] uppercase font-bold text-black tracking-wider">
-              <p>Table {printingOrder.table_number} • Waiter: {printingOrder.waiter?.full_name || printingOrder.profiles?.full_name || 'System'}</p>
-              <p>{new Date(printingOrder.created_at).toLocaleString()}</p>
-            </div>
-          </div>
-
-          <div className="space-y-0.5 mb-1.5">
-            {printingOrder.items?.map((item, idx) => (
-              <div key={idx} className="flex justify-between text-[8px]">
-                <span className="flex-1 pr-1 truncate">{item.quantity}x {item.products?.name || 'Item'}</span>
-                <span className="font-bold">{formatCurrency(item.unit_price * item.quantity)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="border-t border-dashed border-gray-400 pt-1 space-y-0.5">
-            <div className="flex justify-between text-[7.5px] font-bold text-black">
-              <span>SUBTOTAL</span>
-              <span>{formatCurrency(printingOrder.subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-[7.5px] font-bold text-black">
-              <span>TAX (5%)</span>
-              <span>{formatCurrency(printingOrder.vat_amount)}</span>
-            </div>
-            <div className="flex justify-between text-[10px] font-black pt-0.5 text-black border-t border-black mt-0.5">
-              <span>TOTAL</span>
-              <span>{formatCurrency(printingOrder.total_amount)}</span>
-            </div>
-          </div>
-
-          <div className="mt-1.5 pt-1 border-t border-dashed border-gray-400 text-center">
-            <p className="text-[7.5px] font-black uppercase tracking-wider text-black">Payment Details</p>
-            <div className="mt-0.5 space-y-0.5 text-[8px] font-mono font-bold text-black">
-              <div className="flex justify-between"><span>Hormuud:</span><span>623008</span></div>
-              <div className="flex justify-between"><span>Wallet:</span><span>571204</span></div>
-              <div className="flex justify-between"><span>E-Dahab:</span><span>147636</span></div>
-            </div>
-          </div>
-
-          <div className="mt-1.5 text-center text-[7.5px] font-bold text-black">
-            <p>Thank you for visiting Hilac Fast Food!</p>
-          </div>
-        </div>
+      {/* Modern POS Receipt & Kitchen Ticket Modal */}
+      {selectedReceiptOrder && (
+        <PosReceiptModal
+          order={selectedReceiptOrder}
+          initialType={receiptModalType}
+          initialWidth={receiptModalWidth}
+          onClose={() => setSelectedReceiptOrder(null)}
+        />
       )}
     </div>
   );

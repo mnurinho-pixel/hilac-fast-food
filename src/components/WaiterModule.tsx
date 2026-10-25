@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, type Product, type Category, type Table, type Profile } from '../lib/supabase';
 import { formatCurrency } from '../lib/utils';
-import { printReceipt } from '../lib/printService';
-import { ShoppingCart, Trash2, Send, ChevronRight, Grid, User, Lock } from 'lucide-react';
+import { PosReceiptModal, type PosReceiptOrder } from './PosReceiptModal';
+import { ShoppingCart, Trash2, Send, ChevronRight, Grid, User, Lock, Printer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface WaiterModuleProps {
@@ -18,6 +18,7 @@ export function WaiterModule({ user }: WaiterModuleProps) {
   const [tables, setTables] = useState<Table[]>([]);
   const [activeOrders, setActiveOrders] = useState<Record<number, any>>({});
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [submittedOrderId, setSubmittedOrderId] = useState<string | null>(null);
   const [cart, setCart] = useState<{ product: Product; quantity: number }[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -124,6 +125,7 @@ export function WaiterModule({ user }: WaiterModuleProps) {
         }));
 
         await supabase.from('order_items').insert(orderItems);
+        setSubmittedOrderId(editingOrderId);
       } else {
         // Create new order
         const { data: order, error: orderError } = await supabase
@@ -150,6 +152,7 @@ export function WaiterModule({ user }: WaiterModuleProps) {
 
         await supabase.from('order_items').insert(orderItems);
         await supabase.from('tables').update({ is_occupied: true }).eq('number', selectedTable);
+        setSubmittedOrderId(order.id);
       }
 
       setShowReceipt(true);
@@ -165,23 +168,31 @@ export function WaiterModule({ user }: WaiterModuleProps) {
     setCart([]);
     setSelectedTable(null);
     setEditingOrderId(null);
+    setSubmittedOrderId(null);
     setStep('table');
     setShowReceipt(false);
   };
 
   if (showReceipt) {
     return (
-      <ReceiptPopup 
+      <PosReceiptModal 
         order={{ 
-          table_number: selectedTable, 
+          id: submittedOrderId || editingOrderId || undefined,
+          table_number: selectedTable || 1, 
+          waiter_name: user.full_name,
+          created_at: new Date().toISOString(),
+          items: cart.map(item => ({
+            name: item.product.name,
+            quantity: item.quantity,
+            price: item.product.price
+          })),
           subtotal, 
           vat_amount: vatAmount, 
-          total_amount: total 
+          total_amount: total,
+          isUpdate: !!editingOrderId
         }}
-        items={cart}
-        waiterName={user.full_name}
+        initialType="kitchen"
         onClose={closeReceipt}
-        isUpdate={!!editingOrderId}
       />
     );
   }
@@ -350,119 +361,6 @@ export function WaiterModule({ user }: WaiterModuleProps) {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-// Receipt Component for Hilac Fast Food
-function ReceiptPopup({ 
-  order, 
-  items, 
-  waiterName, 
-  onClose,
-  isUpdate
-}: { 
-  order: any, 
-  items: any[], 
-  waiterName: string, 
-  onClose: () => void,
-  isUpdate?: boolean
-}) {
-  const handlePrint = () => {
-    printReceipt({
-      restaurantName: "Hilac Fast Food",
-      tableNumber: order.table_number,
-      waiterName: waiterName,
-      items: items.map(i => ({
-        name: i.product.name,
-        quantity: i.quantity,
-        price: i.product.price
-      })),
-      subtotal: order.subtotal,
-      tax: order.vat_amount,
-      total: order.total_amount,
-      paymentDetails: { hormuud: "623008", wallet: "571204", edahab: "147636" },
-      orderDate: new Date(order.created_at || Date.now()).toLocaleString()
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center p-4 z-[100] backdrop-blur-md print:bg-white print:p-0 print:backdrop-blur-none">
-      <motion.div 
-        initial={{ scale: 0.9, opacity: 0, y: 15 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        id="printable-receipt"
-        className="bg-white w-full max-w-xs rounded-3xl p-5 shadow-2xl font-mono text-slate-800 relative overflow-hidden print:shadow-none print:rounded-none print:max-w-none print:p-1"
-      >
-        {isUpdate && (
-          <div className="absolute top-0 left-0 right-0 bg-blue-600 text-white text-[9px] font-black uppercase tracking-[0.2em] py-1 text-center no-print">
-            Order Updated
-          </div>
-        )}
-        {/* Decorative Circles - Hidden on print */}
-        <div className="absolute -top-3 -left-3 w-8 h-8 bg-slate-50 rounded-full print:hidden" />
-        <div className="absolute -top-3 -right-3 w-8 h-8 bg-slate-50 rounded-full print:hidden" />
-
-        <div className="text-center border-b border-dashed border-gray-300 pb-2 mb-2 print:pb-1 print:mb-1">
-          <h2 className="text-xl font-black uppercase tracking-tight text-slate-900 print:text-sm">Hilac Fast Food</h2>
-          <div className="mt-1 space-y-0.5 text-[10px] uppercase font-bold text-gray-400 tracking-wider print:text-black print:text-[8px]">
-            <p>Table {order.table_number} • Waiter: {waiterName}</p>
-            <p>{new Date().toLocaleString()}</p>
-          </div>
-        </div>
-        
-        <div className="space-y-1 mb-3 print:mb-1.5 print:space-y-0.5">
-          {items.map((item, idx) => (
-            <div key={idx} className="flex justify-between text-xs print:text-[8px]">
-              <span className="flex-1 pr-2 truncate">{item.quantity}x {item.product.name}</span>
-              <span className="font-bold">{formatCurrency(item.product.price * item.quantity)}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="border-t border-dashed border-gray-300 pt-2 print:pt-1 space-y-1 print:space-y-0.5">
-          <div className="flex justify-between text-[11px] print:text-[7.5px] font-bold text-gray-400 print:text-black">
-            <span>SUBTOTAL</span>
-            <span>{formatCurrency(order.subtotal)}</span>
-          </div>
-          <div className="flex justify-between text-[11px] print:text-[7.5px] font-bold text-gray-400 print:text-black">
-            <span>TAX (5%)</span>
-            <span>{formatCurrency(order.vat_amount)}</span>
-          </div>
-          <div className="flex justify-between text-base font-black pt-1 text-slate-900 border-t border-gray-100 print:border-black mt-1 print:mt-0.5 print:text-[10px] print:text-black">
-            <span>TOTAL</span>
-            <span>{formatCurrency(order.total_amount)}</span>
-          </div>
-        </div>
-
-        <div className="mt-2.5 pt-2 print:mt-1 print:pt-1 border-t border-dashed border-gray-300 text-center">
-          <p className="text-[9px] print:text-[7.5px] font-black uppercase tracking-wider text-slate-400 print:text-black">Payment Details</p>
-          <div className="mt-1 space-y-0.5 text-xs print:text-[8px] font-mono font-bold text-slate-800 print:text-black">
-            <div className="flex justify-between"><span>Hormuud:</span><span className="font-black">623008</span></div>
-            <div className="flex justify-between"><span>Wallet:</span><span className="font-black">571204</span></div>
-            <div className="flex justify-between"><span>E-Dahab:</span><span className="font-black">147636</span></div>
-          </div>
-        </div>
-
-        <div className="mt-2 text-center text-[10px] print:text-[7.5px] font-bold text-slate-400 print:text-black">
-          <p>Thank you for visiting Hilac Fast Food!</p>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2 print:hidden">
-          <button 
-            onClick={handlePrint}
-            className="bg-slate-900 text-white h-11 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-slate-200 active:scale-95 transition-transform"
-          >
-            Print Receipt
-          </button>
-          <button 
-            onClick={onClose}
-            className="bg-gray-100 text-slate-600 h-11 rounded-xl font-black text-xs active:scale-95 transition-transform"
-          >
-            Close
-          </button>
-        </div>
-      </motion.div>
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, type Profile, type UserRole, type Product, type Category } from '../lib/supabase';
-import { formatCurrency } from '../lib/utils';
+import { formatCurrency, getCleanOrderNumber, formatReceiptNumber } from '../lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Users, DollarSign, ShoppingBag, Plus, X, Edit2, Trash2, LayoutDashboard, Utensils, Tag, ChevronRight, UserCircle, ChefHat, Search } from 'lucide-react';
+import { Users, DollarSign, ShoppingBag, Plus, X, Edit2, Trash2, LayoutDashboard, Utensils, Tag, ChevronRight, UserCircle, ChefHat, Search, Printer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { PosReceiptModal, type PosReceiptOrder } from './PosReceiptModal';
 
 interface AdminModuleProps {
   user: Profile;
@@ -39,6 +40,36 @@ export function AdminModule({ user }: AdminModuleProps) {
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [orderItemsMap, setOrderItemsMap] = useState<Record<string, any[]>>({});
   const [recentOrderSearch, setRecentOrderSearch] = useState('');
+  const [receiptOrder, setReceiptOrder] = useState<PosReceiptOrder | null>(null);
+
+  const handlePrintOrder = async (order: any) => {
+    let items = orderItemsMap[order.id];
+    if (!items) {
+      const { data } = await supabase
+        .from('order_items')
+        .select('*, products(name)')
+        .eq('order_id', order.id);
+      items = data || [];
+      setOrderItemsMap(prev => ({ ...prev, [order.id]: items }));
+    }
+
+    const formatted: PosReceiptOrder = {
+      id: order.id,
+      table_number: order.table_number,
+      waiter_name: order.profiles?.full_name || 'Staff',
+      created_at: order.created_at,
+      items: items.map((i: any) => ({
+        name: i.products?.name || 'Item',
+        quantity: i.quantity,
+        price: i.unit_price
+      })),
+      subtotal: Number(order.subtotal || 0),
+      vat_amount: Number(order.vat_amount || 0),
+      total_amount: Number(order.total_amount || 0),
+      status: order.status
+    };
+    setReceiptOrder(formatted);
+  };
 
   useEffect(() => {
     fetchData();
@@ -449,7 +480,9 @@ export function AdminModule({ user }: AdminModuleProps) {
                   const waiter = (order.profiles?.full_name || '').toLowerCase();
                   const status = (order.status || '').toLowerCase();
                   const id = order.id.toLowerCase();
-                  return table.includes(q) || waiter.includes(q) || status.includes(q) || id.includes(q);
+                  const cleanNum = getCleanOrderNumber(order.id);
+                  const receiptStr = `receipt #${cleanNum} ${cleanNum} #${cleanNum} order #${cleanNum}`;
+                  return table.includes(q) || waiter.includes(q) || status.includes(q) || id.includes(q) || cleanNum.includes(q) || receiptStr.includes(q);
                 })
                 .map(order => (
                 <div key={order.id} className="border-b border-gray-50 last:border-0 pb-4 last:pb-0">
@@ -463,7 +496,12 @@ export function AdminModule({ user }: AdminModuleProps) {
                         order.status === 'paid' ? "bg-green-500" : order.status === 'cancelled' ? "bg-red-500" : "bg-orange-500"
                       )} />
                       <div>
-                        <p className="text-sm font-bold text-gray-900">Table {order.table_number}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-bold text-gray-900">Table {order.table_number}</p>
+                          <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded-md border border-slate-200">
+                            {formatReceiptNumber(order.id)}
+                          </span>
+                        </div>
                         <p className="text-[10px] text-gray-400 uppercase font-bold">{order.profiles?.full_name || 'System'}</p>
                       </div>
                     </div>
@@ -472,7 +510,14 @@ export function AdminModule({ user }: AdminModuleProps) {
                         <p className="text-sm font-black text-slate-900">{formatCurrency(order.total_amount)}</p>
                         <p className="text-[10px] text-gray-400">{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handlePrintOrder(order)}
+                          className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                          title="Print Receipt / Kitchen Slip"
+                        >
+                          <Printer size={16} />
+                        </button>
                         <button 
                           onClick={() => handleDelete('orders', order.id)}
                           className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-colors"
@@ -645,6 +690,14 @@ export function AdminModule({ user }: AdminModuleProps) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Admin Receipt / Kitchen Slip Preview & Print Modal */}
+      {receiptOrder && (
+        <PosReceiptModal
+          order={receiptOrder}
+          onClose={() => setReceiptOrder(null)}
+        />
+      )}
     </div>
   );
 }

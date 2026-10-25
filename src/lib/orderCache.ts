@@ -1,5 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import type { Order, Profile } from './supabase';
+import { getCleanOrderNumber } from './utils';
 
 export interface CachedOrderItem {
   id: string;
@@ -321,10 +322,11 @@ export function searchCachedOrders(
   const terms = cleanQuery.split(/\s+/).filter(Boolean);
 
   return result.filter(order => {
+    const cleanNum = getCleanOrderNumber(order.id);
     const tableStr = `table ${order.table_number} #${order.table_number} t${order.table_number} ${order.table_number}`;
     const waiterStr = (order.waiter?.full_name || order.profiles?.full_name || '').toLowerCase();
     const idStr = order.id.toLowerCase();
-    const shortId = idStr.slice(-6);
+    const receiptStr = `receipt #${cleanNum} ${cleanNum} #${cleanNum} order #${cleanNum}`;
     const amountStr = `${order.total_amount} $${order.total_amount}`;
     const statusStr = (order.status || '').toLowerCase();
     const dateFormatted = new Date(order.created_at).toLocaleDateString().toLowerCase();
@@ -335,7 +337,7 @@ export function searchCachedOrders(
       .join(' ')
       .toLowerCase();
 
-    const haystack = `${tableStr} ${waiterStr} ${idStr} ${shortId} ${amountStr} ${statusStr} ${dateFormatted} ${timeFormatted} ${itemsStr}`;
+    const haystack = `${tableStr} ${waiterStr} ${receiptStr} ${idStr} ${amountStr} ${statusStr} ${dateFormatted} ${timeFormatted} ${itemsStr}`;
 
     // Every search term must be matched
     return terms.every(term => haystack.includes(term));

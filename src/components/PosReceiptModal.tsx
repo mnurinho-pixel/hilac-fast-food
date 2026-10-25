@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { formatCurrency, getCleanOrderNumber } from '../lib/utils';
 import {
   printReceipt,
@@ -159,6 +160,7 @@ export function PosReceiptModal({
   const handlePopupPrint = (targetWidth: PaperWidth = paperWidth) => {
     setIsPrinting(true);
     setPaperWidth(targetWidth);
+    applyPrintPageSize(targetWidth);
     const payload = getPrintPayload(activeType, targetWidth);
     const popup = openPrintPopup(payload, targetWidth);
     setLastPrinted(`Popup Window (${targetWidth})`);
@@ -167,6 +169,16 @@ export function PosReceiptModal({
       // If popup was blocked, fallback dialog stays visible
       setShowFallbackDialog(true);
     }
+  };
+
+  const handleIframePrint = async (targetWidth: PaperWidth = paperWidth) => {
+    setIsPrinting(true);
+    setPaperWidth(targetWidth);
+    applyPrintPageSize(targetWidth);
+    const payload = getPrintPayload(activeType, targetWidth);
+    await printViaIframe(payload, targetWidth);
+    setLastPrinted(`Direct Iframe (${targetWidth})`);
+    setTimeout(() => setIsPrinting(false), 800);
   };
 
   const handlePrintBoth = async (targetWidth: PaperWidth = paperWidth) => {
@@ -178,8 +190,9 @@ export function PosReceiptModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[200] flex items-center justify-center p-3 sm:p-4 overflow-y-auto print:bg-white print:p-0 print:static print:z-auto">
-      {/* Screen Modal Container */}
+    <>
+      <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[200] flex items-center justify-center p-3 sm:p-4 overflow-y-auto print:hidden">
+        {/* Screen Modal Container */}
       <motion.div
         initial={{ opacity: 0, scale: 0.96, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -694,6 +707,16 @@ export function PosReceiptModal({
                   </button>
                 </div>
 
+                <button
+                  onClick={() => {
+                    handleIframePrint(paperWidth);
+                    setShowFallbackDialog(false);
+                  }}
+                  className="p-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-200 rounded-xl font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all border border-slate-700/60"
+                >
+                  <span>⚡ Silent Print (Direct Iframe)</span>
+                </button>
+
                 <div className="pt-2">
                   <button
                     onClick={() => setShowFallbackDialog(false)}
@@ -707,144 +730,151 @@ export function PosReceiptModal({
           )}
         </AnimatePresence>
       </motion.div>
-
-      {/* ============================================================== */}
-      {/* HARDWARE / BROWSER PRINT TEMPLATE (Activated via window.print) */}
-      {/* ============================================================== */}
-      <div
-        id="printable-receipt"
-        className={`hidden print:block font-mono text-black ${
-          paperWidth === '80mm' ? 'paper-80mm' : 'paper-58mm'
-        }`}
-      >
-        {activeType === 'kitchen' ? (
-          /* Printable Kitchen Slip */
-          <div className="space-y-2 text-black leading-tight">
-            <div className="text-center border-b-2 border-black pb-1.5">
-              <p className="text-xs font-black uppercase">*** KITCHEN ORDER ***</p>
-              <p className="text-sm font-black uppercase">HILAC FAST FOOD</p>
-            </div>
-
-            <div className="border-2 border-black p-1 text-center my-1">
-              <p className="text-[10px] font-black uppercase">TABLE</p>
-              <p className="text-3xl font-black text-black leading-none">
-                {order.table_number}
-              </p>
-            </div>
-
-            <div className="text-xs font-bold border-b border-black pb-1">
-              <div className="flex justify-between">
-                <span>Server: {order.waiter_name || 'Staff'}</span>
-                <span>Time: {orderTimeOnly}</span>
-              </div>
-              <div className="font-black text-sm">Ticket: #{cleanReceiptNumber}</div>
-            </div>
-
-            <div className="py-1 space-y-1.5 border-b-2 border-black">
-              {order.items.map((item, idx) => (
-                <div key={idx} className="flex items-start gap-1.5 text-sm font-black">
-                  <span className="text-base font-black">[ ] {item.quantity}x</span>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-black uppercase">{item.name}</span>
-                    {item.notes && (
-                      <p className="text-xs font-bold text-black">* Note: {item.notes}</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="text-center pt-1">
-              <p className="text-xs font-black uppercase">Total Items: {totalItemsCount}</p>
-              <p className="text-[10px] font-bold">*** EXPEDITE TO KITCHEN ***</p>
-              <p className="text-[9px]">{formattedDate}</p>
-            </div>
-          </div>
-        ) : (
-          /* Printable Customer Receipt */
-          <div className="space-y-1.5 text-black leading-tight">
-            <div className="text-center border-b border-dashed border-black pb-1.5">
-              <h2 className="text-base font-black uppercase tracking-tight text-black">
-                Hilac Fast Food
-              </h2>
-              <p className="text-[10px] font-bold text-black">Fresh & Tasty Fast Food</p>
-              <div className="mt-1 text-[10px] font-bold text-black">
-                <div className="flex justify-between">
-                  <span>Receipt: #{cleanReceiptNumber}</span>
-                  <span>Table: {order.table_number}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Waiter: {order.waiter_name || 'Staff'}</span>
-                  <span>{formattedDate}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Items Header */}
-            <div className="border-b border-black pb-0.5 flex justify-between text-[10px] font-black uppercase text-black">
-              <span className="w-8">Qty</span>
-              <span className="flex-1 text-left">Item</span>
-              <span className="text-right">Price</span>
-            </div>
-
-            {/* Items */}
-            <div className="space-y-1 py-1 text-xs">
-              {order.items.map((item, idx) => {
-                const itemPrice = item.price ?? 0;
-                const lineTotal = itemPrice * item.quantity;
-                return (
-                  <div key={idx} className="flex justify-between text-xs font-bold text-black">
-                    <span className="w-8 font-black">{item.quantity}x</span>
-                    <span className="flex-1 text-left pr-1 truncate">{item.name}</span>
-                    <span className="text-right font-black">{formatCurrency(lineTotal)}</span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Totals */}
-            <div className="border-t border-dashed border-black pt-1 space-y-0.5 text-xs font-bold text-black">
-              <div className="flex justify-between text-[11px]">
-                <span>SUBTOTAL:</span>
-                <span>{formatCurrency(order.subtotal ?? 0)}</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span>TAX (5%):</span>
-                <span>{formatCurrency(order.vat_amount ?? 0)}</span>
-              </div>
-              <div className="border-t border-black pt-1 flex justify-between text-sm font-black text-black">
-                <span>TOTAL:</span>
-                <span className="text-base font-black">{formatCurrency(order.total_amount ?? 0)}</span>
-              </div>
-            </div>
-
-            {/* Merchant Payment Details */}
-            <div className="border-t border-dashed border-black pt-1 text-center">
-              <p className="text-[10px] font-black uppercase text-black">Payment Details</p>
-              <div className="mt-0.5 text-[10px] font-bold text-black space-y-0.5">
-                <div className="flex justify-between">
-                  <span>Hormuud:</span>
-                  <span className="font-black">623008</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Wallet:</span>
-                  <span className="font-black">571204</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>E-Dahab:</span>
-                  <span className="font-black">147636</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="border-t border-dashed border-black pt-1 text-center text-[10px] font-bold text-black">
-              <p>Mahadsanid / Thank you!</p>
-              <p>Please visit Hilac Fast Food again</p>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
+
+    {/* ============================================================== */}
+    {/* HARDWARE / BROWSER PRINT TEMPLATE (Activated via window.print) */}
+    {/* Portal directly to document.body so #root is completely hidden */}
+    {/* and print preview never shows blank/white screen!               */}
+    {/* ============================================================== */}
+    {typeof document !== 'undefined' &&
+      createPortal(
+        <div
+          id="printable-receipt"
+          className={`font-mono text-black ${
+            paperWidth === '80mm' ? 'paper-80mm' : 'paper-58mm'
+          }`}
+        >
+          {activeType === 'kitchen' ? (
+            /* Printable Kitchen Slip */
+            <div className="space-y-2 text-black leading-tight">
+              <div className="text-center border-b-2 border-black pb-1.5">
+                <p className="text-xs font-black uppercase">*** KITCHEN ORDER ***</p>
+                <p className="text-sm font-black uppercase">HILAC FAST FOOD</p>
+              </div>
+
+              <div className="border-2 border-black p-1 text-center my-1">
+                <p className="text-[10px] font-black uppercase">TABLE</p>
+                <p className="text-3xl font-black text-black leading-none">
+                  {order.table_number}
+                </p>
+              </div>
+
+              <div className="text-xs font-bold border-b border-black pb-1">
+                <div className="flex justify-between">
+                  <span>Server: {order.waiter_name || 'Staff'}</span>
+                  <span>Time: {orderTimeOnly}</span>
+                </div>
+                <div className="font-black text-sm">Ticket: #{cleanReceiptNumber}</div>
+              </div>
+
+              <div className="py-1 space-y-1.5 border-b-2 border-black">
+                {order.items.map((item, idx) => (
+                  <div key={idx} className="flex items-start gap-1.5 text-sm font-black">
+                    <span className="text-base font-black">[ ] {item.quantity}x</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-black uppercase">{item.name}</span>
+                      {item.notes && (
+                        <p className="text-xs font-bold text-black">* Note: {item.notes}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="text-center pt-1">
+                <p className="text-xs font-black uppercase">Total Items: {totalItemsCount}</p>
+                <p className="text-[10px] font-bold">*** EXPEDITE TO KITCHEN ***</p>
+                <p className="text-[9px]">{formattedDate}</p>
+              </div>
+            </div>
+          ) : (
+            /* Printable Customer Receipt */
+            <div className="space-y-1.5 text-black leading-tight">
+              <div className="text-center border-b border-dashed border-black pb-1.5">
+                <h2 className="text-base font-black uppercase tracking-tight text-black">
+                  Hilac Fast Food
+                </h2>
+                <p className="text-[10px] font-bold text-black">Fresh & Tasty Fast Food</p>
+                <div className="mt-1 text-[10px] font-bold text-black">
+                  <div className="flex justify-between">
+                    <span>Receipt: #{cleanReceiptNumber}</span>
+                    <span>Table: {order.table_number}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Waiter: {order.waiter_name || 'Staff'}</span>
+                    <span>{formattedDate}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Header */}
+              <div className="border-b border-black pb-0.5 flex justify-between text-[10px] font-black uppercase text-black">
+                <span className="w-8">Qty</span>
+                <span className="flex-1 text-left">Item</span>
+                <span className="text-right">Price</span>
+              </div>
+
+              {/* Items */}
+              <div className="space-y-1 py-1 text-xs">
+                {order.items.map((item, idx) => {
+                  const itemPrice = item.price ?? 0;
+                  const lineTotal = itemPrice * item.quantity;
+                  return (
+                    <div key={idx} className="flex justify-between text-xs font-bold text-black">
+                      <span className="w-8 font-black">{item.quantity}x</span>
+                      <span className="flex-1 text-left pr-1 truncate">{item.name}</span>
+                      <span className="text-right font-black">{formatCurrency(lineTotal)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Totals */}
+              <div className="border-t border-dashed border-black pt-1 space-y-0.5 text-xs font-bold text-black">
+                <div className="flex justify-between text-[11px]">
+                  <span>SUBTOTAL:</span>
+                  <span>{formatCurrency(order.subtotal ?? 0)}</span>
+                </div>
+                <div className="flex justify-between text-[11px]">
+                  <span>TAX (5%):</span>
+                  <span>{formatCurrency(order.vat_amount ?? 0)}</span>
+                </div>
+                <div className="border-t border-black pt-1 flex justify-between text-sm font-black text-black">
+                  <span>TOTAL:</span>
+                  <span className="text-base font-black">{formatCurrency(order.total_amount ?? 0)}</span>
+                </div>
+              </div>
+
+              {/* Merchant Payment Details */}
+              <div className="border-t border-dashed border-black pt-1 text-center">
+                <p className="text-[10px] font-black uppercase text-black">Payment Details</p>
+                <div className="mt-0.5 text-[10px] font-bold text-black space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>Hormuud:</span>
+                    <span className="font-black">623008</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Wallet:</span>
+                    <span className="font-black">571204</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>E-Dahab:</span>
+                    <span className="font-black">147636</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-dashed border-black pt-1 text-center text-[10px] font-bold text-black">
+                <p>Mahadsanid / Thank you!</p>
+                <p>Please visit Hilac Fast Food again</p>
+              </div>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
+  </>
   );
 }

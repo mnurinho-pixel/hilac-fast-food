@@ -38,7 +38,7 @@ export const applyPrintPageSize = (width: PaperWidth = '58mm') => {
 
   const is80 = width === '80mm';
   const sizeVal = is80 ? '80mm auto' : '58mm auto';
-  const maxWidthVal = is80 ? '76mm' : '54mm';
+  const maxWidthVal = is80 ? '78mm' : '54mm';
   const fontSize = is80 ? '12px' : '11px';
 
   styleEl.textContent = `
@@ -47,18 +47,49 @@ export const applyPrintPageSize = (width: PaperWidth = '58mm') => {
       margin: 0mm !important;
     }
     @media print {
+      /* Completely hide the React app root so it cannot push content or create blank pages */
+      #root {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+      }
+      /* Hide all direct body children other than our printable receipt */
+      body > *:not(#printable-receipt) {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        overflow: hidden !important;
+      }
       html, body {
-        width: ${maxWidthVal} !important;
+        width: 100% !important;
+        height: auto !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #ffffff !important;
+        color: #000000 !important;
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
       }
       #printable-receipt {
         display: block !important;
+        visibility: visible !important;
+        position: static !important;
         width: 100% !important;
         max-width: ${maxWidthVal} !important;
         font-size: ${fontSize} !important;
-        padding: 2mm 1mm !important;
+        padding: 2mm 1.5mm !important;
+        margin: 0 auto !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        box-sizing: border-box !important;
+      }
+      #printable-receipt * {
+        color: #000000 !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+        visibility: visible !important;
       }
     }
   `;
@@ -66,13 +97,14 @@ export const applyPrintPageSize = (width: PaperWidth = '58mm') => {
 
 /**
  * Builds standalone, pristine thermal receipt HTML for 58mm or 80mm paper rolls.
- * Ready for standalone popup printing or iframe fallback.
+ * Includes interactive on-screen toolbar and thermal paper card so the popup window
+ * NEVER opens to a blank/white void.
  */
 export const generateThermalHtml = (data: PrintData, width: PaperWidth = '58mm'): string => {
   const isKitchen = data.type === 'kitchen';
   const is80 = width === '80mm';
-  const containerWidth = is80 ? '74mm' : '52mm';
-  const baseFontSize = is80 ? '12px' : '11px';
+  const containerWidth = is80 ? '76mm' : '54mm';
+  const baseFontSize = is80 ? '13px' : '11.5px';
   const ordNumber = String(data.orderNumber || '').replace(/^#/, '');
   const restaurantName = data.restaurantName || 'HILAC FAST FOOD';
 
@@ -84,45 +116,48 @@ export const generateThermalHtml = (data: PrintData, width: PaperWidth = '58mm')
 
   const totalItemsCount = data.items.reduce((s, i) => s + (i.quantity || 1), 0);
 
-  const itemsHtml = isKitchen
-    ? data.items
-        .map(
-          item => `
-          <div style="padding: 4px 0; border-bottom: 1px dashed #000; display: flex; align-items: flex-start; gap: 6px;">
-            <div style="border: 2px solid #000; width: 14px; height: 14px; margin-top: 2px; flex-shrink: 0;"></div>
-            <div style="flex: 1;">
-              <div style="font-size: ${is80 ? '15px' : '13px'}; font-weight: 900;">
-                <span style="background: #000; color: #fff; padding: 0 4px; margin-right: 4px;">${item.quantity}x</span>
-                ${item.name.toUpperCase()}
-              </div>
-              ${item.notes ? `<div style="font-size: 11px; font-weight: bold; margin-top: 2px;">* Note: ${item.notes}</div>` : ''}
-            </div>
+  // Pre-render Kitchen items
+  const kitchenItemsHtml = data.items
+    .map(
+      item => `
+      <div style="padding: 5px 0; border-bottom: 1px dashed #000; display: flex; align-items: flex-start; gap: 8px;">
+        <div style="border: 2px solid #000; width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0; background: #fff;"></div>
+        <div style="flex: 1;">
+          <div style="font-size: ${is80 ? '16px' : '14px'}; font-weight: 900; line-height: 1.2;">
+            <span style="background: #000; color: #fff; padding: 1px 5px; margin-right: 5px; border-radius: 2px;">${item.quantity}x</span>
+            ${item.name.toUpperCase()}
           </div>
-        `
-        )
-        .join('')
-    : data.items
-        .map(item => {
-          const price = item.price ?? 0;
-          const lineTotal = (price * item.quantity).toFixed(2);
-          return `
-          <tr style="font-size: ${is80 ? '12px' : '11px'};">
-            <td style="font-weight: 900; vertical-align: top; width: 28px;">${item.quantity}x</td>
-            <td style="font-weight: 600; vertical-align: top; padding: 2px 4px;">
-              ${item.name}
-              ${item.quantity > 1 ? `<div style="font-size: 9px; color: #444;">@ $${price.toFixed(2)}</div>` : ''}
-            </td>
-            <td style="font-weight: 900; text-align: right; vertical-align: top; white-space: nowrap;">$${lineTotal}</td>
-          </tr>
-        `;
-        })
-        .join('');
+          ${item.notes ? `<div style="font-size: 11px; font-weight: bold; margin-top: 3px; color: #b91c1c;">* Note: ${item.notes}</div>` : ''}
+        </div>
+      </div>
+    `
+    )
+    .join('');
+
+  // Pre-render Customer receipt items
+  const customerItemsHtml = data.items
+    .map(item => {
+      const price = item.price ?? 0;
+      const lineTotal = (price * item.quantity).toFixed(2);
+      return `
+      <tr style="font-size: ${is80 ? '12.5px' : '11.5px'};">
+        <td style="font-weight: 900; vertical-align: top; width: 30px; padding: 3px 0;">${item.quantity}x</td>
+        <td style="font-weight: 700; vertical-align: top; padding: 3px 4px;">
+          ${item.name}
+          ${item.quantity > 1 ? `<div style="font-size: 10px; font-weight: normal; color: #444;">@ $${price.toFixed(2)}</div>` : ''}
+        </td>
+        <td style="font-weight: 900; text-align: right; vertical-align: top; white-space: nowrap; padding: 3px 0;">$${lineTotal}</td>
+      </tr>
+    `;
+    })
+    .join('');
 
   return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>${isKitchen ? 'Kitchen Ticket' : 'Receipt'} #${ordNumber}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${isKitchen ? 'Kitchen Slip' : 'Customer Bill'} #${ordNumber} - ${restaurantName}</title>
   <style>
     @page {
       size: ${width} auto;
@@ -134,200 +169,310 @@ export const generateThermalHtml = (data: PrintData, width: PaperWidth = '58mm')
       padding: 0;
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Courier New", monospace;
+      background: #0b0f19;
       color: #000000;
-      background: #ffffff;
-      padding: 4mm 2.5mm;
-      width: ${containerWidth};
-      margin: 0 auto;
-      font-size: ${baseFontSize};
-      line-height: 1.25;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+      padding: 0;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
+    /* Sticky Screen Toolbar */
     .thermal-toolbar {
       position: sticky;
       top: 0;
       left: 0;
       right: 0;
-      background: #0f172a;
+      width: 100%;
+      background: #111827;
       color: #ffffff;
-      padding: 10px;
-      margin: -4mm -2.5mm 12px -2.5mm;
+      padding: 10px 14px;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 6px;
-      border-bottom: 2px solid #334155;
-      font-family: system-ui, sans-serif;
+      gap: 8px;
+      border-bottom: 1px solid #1f2937;
+      font-family: system-ui, -apple-system, sans-serif;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
-    .thermal-btn {
+    .toolbar-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #f3f4f6;
+    }
+    .badge {
       background: #f59e0b;
       color: #000;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 2px 7px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+    }
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn {
+      font-family: inherit;
       font-weight: 800;
-      font-size: 11px;
-      padding: 6px 10px;
+      font-size: 12px;
+      padding: 7px 12px;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
     }
-    .thermal-btn:hover {
-      background: #d97706;
+    .btn-primary {
+      background: #f59e0b;
+      color: #000;
+      box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
     }
-    .thermal-btn-secondary {
-      background: #334155;
+    .btn-primary:hover {
+      background: #fbbf24;
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: #1f2937;
+      color: #e5e7eb;
+      border: 1px solid #374151;
+    }
+    .btn-secondary:hover {
+      background: #374151;
       color: #fff;
     }
-    .thermal-btn-secondary:hover {
-      background: #475569;
+    /* Thermal paper preview card */
+    .receipt-container {
+      padding: 16px 10px 40px;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+    .receipt-card {
+      background: #ffffff;
+      color: #000000;
+      width: ${containerWidth};
+      max-width: 100%;
+      padding: 4mm 3mm;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+      border-radius: 8px;
+      font-size: ${baseFontSize};
+      line-height: 1.25;
+      position: relative;
     }
     .center { text-align: center; }
     .bold { font-weight: 900; }
     .divider { border-top: 1px dashed #000; margin: 6px 0; }
     .divider-double { border-top: 2px solid #000; margin: 6px 0; }
     table { width: 100%; border-collapse: collapse; }
+
+    /* PRINT MEDIA RULES */
     @media print {
-      .thermal-toolbar { display: none !important; }
-      body { padding: 1mm 1mm; }
+      .no-print, .thermal-toolbar {
+        display: none !important;
+      }
+      html, body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+      }
+      .receipt-container {
+        padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+        width: 100% !important;
+      }
+      .receipt-card {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        width: 100% !important;
+        max-width: ${containerWidth} !important;
+        margin: 0 auto !important;
+        padding: 1.5mm 1mm !important;
+      }
+      .receipt-card * {
+        color: #000000 !important;
+      }
     }
   </style>
 </head>
 <body>
-  <!-- Manual interactive toolbar inside popup in case browser print dialog didn't trigger automatically -->
-  <div class="thermal-toolbar">
-    <div style="font-size: 12px; font-weight: 700;">
-      Hilac POS (${width})
+  <!-- Screen interactive toolbar -->
+  <div class="thermal-toolbar no-print">
+    <div class="toolbar-title">
+      <span>${restaurantName}</span>
+      <span class="badge" id="width-badge">${width}</span>
+      <span style="font-size: 11px; color: #9ca3af;">Table #${data.tableNumber}</span>
     </div>
-    <div style="display: flex; gap: 4px;">
-      <button class="thermal-btn" onclick="window.print()">🖨️ Print Now</button>
-      <button class="thermal-btn thermal-btn-secondary" onclick="window.close()">✕ Close</button>
+    <div class="toolbar-actions">
+      <button class="btn btn-primary" onclick="window.print()">
+        🖨️ Print Now
+      </button>
+      <button class="btn btn-secondary" onclick="toggleFormat()">
+        🔄 <span id="format-toggle-label">${isKitchen ? 'View Bill' : 'View Kitchen'}</span>
+      </button>
+      <button class="btn btn-secondary" onclick="window.close()">
+        ✕ Close
+      </button>
     </div>
   </div>
 
-  ${
-    isKitchen
-      ? `
-    <!-- KITCHEN ORDER TICKET (KOT) -->
-    <div class="center divider-double" style="padding-bottom: 4px;">
-      <div style="background: #000; color: #fff; display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: 900; letter-spacing: 1px;">
-        *** KITCHEN ORDER TICKET ***
+  <div class="receipt-container">
+    <div class="receipt-card" id="receipt-card">
+      <!-- KITCHEN VIEW -->
+      <div id="kitchen-view" style="display: ${isKitchen ? 'block' : 'none'};">
+        <div class="center divider-double" style="padding-bottom: 4px;">
+          <div style="background: #000; color: #fff; display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 900; letter-spacing: 1px;">
+            *** KITCHEN ORDER TICKET ***
+          </div>
+          <div style="font-size: 19px; font-weight: 900; margin-top: 4px; text-transform: uppercase;">${restaurantName}</div>
+          <div style="font-size: 10.5px; font-weight: bold; color: #333;">FOOD PREPARATION SLIP</div>
+        </div>
+
+        <div style="border: 2px solid #000; padding: 6px 4px; text-align: center; margin: 6px 0; background: #fafafa;">
+          <div style="font-size: 9.5px; font-weight: 900; letter-spacing: 1px;">DESTINATION TABLE</div>
+          <div style="font-size: 34px; font-weight: 900; line-height: 1; margin: 2px 0;">TABLE ${data.tableNumber}</div>
+          <div style="display: flex; justify-content: space-between; font-size: 10.5px; font-weight: bold; border-top: 1px solid #000; margin-top: 4px; padding-top: 3px;">
+            <span>Server: ${data.waiterName}</span>
+            <span>Ticket: #${ordNumber}</span>
+          </div>
+        </div>
+
+        <div style="font-size: 10.5px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 4px;">
+          <span>Items: ${data.items.length} (${totalItemsCount} portions)</span>
+          <span>${data.orderDate}</span>
+        </div>
+
+        <div class="divider-double"></div>
+
+        <div style="margin: 6px 0;">
+          ${kitchenItemsHtml}
+        </div>
+
+        <div class="divider-double"></div>
+        <div class="center" style="font-size: 10.5px; font-weight: 900; margin-top: 6px;">
+          *** EXPEDITE ORDER TO KITCHEN ***
+          <div style="font-size: 9.5px; font-weight: normal; margin-top: 3px;">Printed: ${new Date().toLocaleTimeString()}</div>
+        </div>
       </div>
-      <div style="font-size: 18px; font-weight: 900; margin-top: 4px;">${restaurantName}</div>
-      <div style="font-size: 10px; font-weight: bold;">FOOD PREPARATION SLIP</div>
-    </div>
 
-    <div style="border: 2px solid #000; padding: 6px 4px; text-align: center; margin: 6px 0;">
-      <div style="font-size: 9px; font-weight: 900; letter-spacing: 1px;">TABLE NUMBER</div>
-      <div style="font-size: 32px; font-weight: 900; line-height: 1;">${data.tableNumber}</div>
-      <div style="display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; border-top: 1px solid #000; margin-top: 4px; padding-top: 2px;">
-        <span>Server: ${data.waiterName}</span>
-        <span>Ticket: #${ordNumber}</span>
+      <!-- CUSTOMER VIEW -->
+      <div id="customer-view" style="display: ${isKitchen ? 'none' : 'block'};">
+        <div class="center divider" style="padding-bottom: 4px;">
+          <div style="font-size: 21px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.5px;">${restaurantName}</div>
+          <div style="font-size: 10.5px; font-weight: bold; color: #333;">Fresh & Tasty Fast Food</div>
+          <div class="divider"></div>
+          <div style="display: flex; justify-content: space-between; font-size: 10.5px; font-weight: bold;">
+            <span>Receipt: #${ordNumber}</span>
+            <span>Table: #${data.tableNumber}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 10px;">
+            <span>Waiter: ${data.waiterName}</span>
+            <span>${data.orderDate}</span>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <table>
+          <thead>
+            <tr style="border-bottom: 1px solid #000; font-size: 10.5px; text-transform: uppercase;">
+              <th style="text-align: left; width: 30px; padding-bottom: 2px;">Qty</th>
+              <th style="text-align: left; padding: 0 4px 2px 4px;">Item</th>
+              <th style="text-align: right; padding-bottom: 2px;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${customerItemsHtml}
+          </tbody>
+        </table>
+
+        <div class="divider"></div>
+
+        <div style="font-size: 11.5px; line-height: 1.35;">
+          ${
+            data.subtotal !== undefined
+              ? `<div style="display: flex; justify-content: space-between;">
+                  <span>SUBTOTAL:</span>
+                  <span class="bold">$${data.subtotal.toFixed(2)}</span>
+                </div>`
+              : ''
+          }
+          ${
+            data.tax !== undefined
+              ? `<div style="display: flex; justify-content: space-between; font-size: 10.5px;">
+                  <span>TAX / VAT (5%):</span>
+                  <span>$${data.tax.toFixed(2)}</span>
+                </div>`
+              : ''
+          }
+          <div class="divider"></div>
+          <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 900;">
+            <span>GRAND TOTAL:</span>
+            <span>$${(data.total ?? 0).toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <div style="background: #f8f8f8; border: 1px solid #ddd; padding: 5px 7px; border-radius: 4px; font-size: 10.5px; margin: 6px 0;">
+          <div class="center bold" style="font-size: 9.5px; text-transform: uppercase; margin-bottom: 3px;">
+            Payment Accounts
+          </div>
+          <div style="display: flex; justify-content: space-between;"><span>Hormuud:</span><span class="bold">${details.hormuud || '623008'}</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>Wallet:</span><span class="bold">${details.wallet || '571204'}</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>E-Dahab:</span><span class="bold">${details.edahab || '147636'}</span></div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="center" style="font-size: 10px; margin-top: 6px;">
+          <div class="bold" style="text-transform: uppercase; font-size: 11px;">Mahadsanid / Thank you!</div>
+          <div style="font-size: 9.5px; color: #555; margin-top: 2px;">Please visit Hilac Fast Food again</div>
+          <div style="font-family: monospace; font-size: 10px; margin-top: 4px; letter-spacing: 2px;">*${ordNumber}*</div>
+        </div>
       </div>
     </div>
-
-    <div style="font-size: 10px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 4px;">
-      <span>Items: ${data.items.length} (${totalItemsCount} portions)</span>
-      <span>${data.orderDate}</span>
-    </div>
-
-    <div class="divider-double"></div>
-
-    <div style="margin: 6px 0;">
-      ${itemsHtml}
-    </div>
-
-    <div class="divider-double"></div>
-    <div class="center" style="font-size: 10px; font-weight: 900; margin-top: 6px;">
-      *** EXPEDITE ORDER TO KITCHEN ***
-      <div style="font-size: 9px; font-weight: normal; margin-top: 2px;">Printed: ${new Date().toLocaleTimeString()}</div>
-    </div>
-  `
-      : `
-    <!-- CUSTOMER RECEIPT -->
-    <div class="center divider" style="padding-bottom: 4px;">
-      <div style="font-size: 20px; font-weight: 900;">${restaurantName}</div>
-      <div style="font-size: 10px; font-weight: bold;">Fresh & Tasty Fast Food</div>
-      <div class="divider"></div>
-      <div style="display: flex; justify-content: space-between; font-size: 10px; font-weight: bold;">
-        <span>Receipt: #${ordNumber}</span>
-        <span>Table: #${data.tableNumber}</span>
-      </div>
-      <div style="display: flex; justify-content: space-between; font-size: 10px;">
-        <span>Waiter: ${data.waiterName}</span>
-        <span>${data.orderDate}</span>
-      </div>
-    </div>
-
-    <div class="divider"></div>
-    <table>
-      <thead>
-        <tr style="border-bottom: 1px solid #000; font-size: 10px; text-transform: uppercase;">
-          <th style="text-align: left; width: 28px;">Qty</th>
-          <th style="text-align: left; padding: 2px 4px;">Item</th>
-          <th style="text-align: right;">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${itemsHtml}
-      </tbody>
-    </table>
-
-    <div class="divider"></div>
-
-    <div style="font-size: 11px;">
-      ${
-        data.subtotal !== undefined
-          ? `<div style="display: flex; justify-content: space-between;">
-              <span>SUBTOTAL:</span>
-              <span class="bold">$${data.subtotal.toFixed(2)}</span>
-            </div>`
-          : ''
-      }
-      ${
-        data.tax !== undefined
-          ? `<div style="display: flex; justify-content: space-between; font-size: 10px;">
-              <span>TAX / VAT (5%):</span>
-              <span>$${data.tax.toFixed(2)}</span>
-            </div>`
-          : ''
-      }
-      <div class="divider"></div>
-      <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 900;">
-        <span>TOTAL:</span>
-        <span>$${(data.total ?? 0).toFixed(2)}</span>
-      </div>
-    </div>
-
-    <div class="divider"></div>
-    <div style="background: #f5f5f5; border: 1px solid #ccc; padding: 4px 6px; border-radius: 4px; font-size: 10px; margin: 6px 0;">
-      <div class="center bold" style="font-size: 9px; text-transform: uppercase; margin-bottom: 2px;">
-        Payment Merchant Numbers
-      </div>
-      <div style="display: flex; justify-content: space-between;"><span>Hormuud:</span><span class="bold">${details.hormuud || '623008'}</span></div>
-      <div style="display: flex; justify-content: space-between;"><span>Wallet:</span><span class="bold">${details.wallet || '571204'}</span></div>
-      <div style="display: flex; justify-content: space-between;"><span>E-Dahab:</span><span class="bold">${details.edahab || '147636'}</span></div>
-    </div>
-
-    <div class="divider"></div>
-    <div class="center" style="font-size: 10px; margin-top: 6px;">
-      <div class="bold" style="text-transform: uppercase;">Mahadsanid / Thank you!</div>
-      <div style="font-size: 9px; color: #555;">Please visit Hilac Fast Food again</div>
-      <div style="font-family: monospace; font-size: 9px; margin-top: 4px;">*${ordNumber}*</div>
-    </div>
-  `
-  }
+  </div>
 
   <script>
-    // Automatic print attempt with smooth fallback
-    window.onload = function() {
-      setTimeout(function() {
-        try {
-          window.focus();
-          window.print();
-        } catch (e) {
-          console.error("Auto print failed in popup:", e);
-        }
-      }, 250);
-    };
+    var currentIsKitchen = ${isKitchen};
+    function toggleFormat() {
+      currentIsKitchen = !currentIsKitchen;
+      document.getElementById('kitchen-view').style.display = currentIsKitchen ? 'block' : 'none';
+      document.getElementById('customer-view').style.display = currentIsKitchen ? 'none' : 'block';
+      document.getElementById('format-toggle-label').textContent = currentIsKitchen ? 'View Bill' : 'View Kitchen';
+      document.title = (currentIsKitchen ? 'Kitchen Slip' : 'Customer Bill') + ' #${ordNumber} - ${restaurantName}';
+    }
+
+    // Auto print trigger with safety timer
+    function triggerPrint() {
+      try {
+        window.focus();
+        window.print();
+      } catch (err) {
+        console.warn("Auto-print in popup caught:", err);
+      }
+    }
+
+    if (document.readyState === 'complete') {
+      setTimeout(triggerPrint, 250);
+    } else {
+      window.addEventListener('load', function() {
+        setTimeout(triggerPrint, 250);
+      });
+    }
   </script>
 </body>
 </html>`;
@@ -335,16 +480,41 @@ export const generateThermalHtml = (data: PrintData, width: PaperWidth = '58mm')
 
 /**
  * Opens a dedicated print popup window.
+ * Uses a Blob URL for reliable HTML rendering across all modern browsers.
  * If automatic browser printing gets suppressed or doesn't exit, this popup window
- * gives the user an independent screen with dedicated Print 58mm / 80mm buttons!
+ * shows all the order data clearly with manual print buttons.
  */
 export const openPrintPopup = (data: PrintData, width: PaperWidth = '58mm'): Window | null => {
   const html = generateThermalHtml(data, width);
-  const winWidth = width === '80mm' ? 440 : 380;
-  const winHeight = 620;
+  const winWidth = width === '80mm' ? 480 : 420;
+  const winHeight = 680;
   const left = Math.max(0, (window.screen.width - winWidth) / 2);
   const top = Math.max(0, (window.screen.height - winHeight) / 2);
 
+  // 1. Attempt using a Blob URL (eliminates blank about:blank issues)
+  try {
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    const popup = window.open(
+      blobUrl,
+      '_blank',
+      `width=${winWidth},height=${winHeight},top=${top},left=${left},scrollbars=yes,resizable=yes`
+    );
+
+    if (popup) {
+      // Clean up object URL after popup loads
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(blobUrl);
+        } catch (_) {}
+      }, 5000);
+      return popup;
+    }
+  } catch (err) {
+    console.warn('Blob popup open failed, falling back to document.write:', err);
+  }
+
+  // 2. Fallback to document.write on about:blank if Blob URL was blocked
   try {
     const popup = window.open(
       '',
@@ -359,10 +529,10 @@ export const openPrintPopup = (data: PrintData, width: PaperWidth = '58mm'): Win
       return popup;
     }
   } catch (err) {
-    console.warn('Popup window blocked or failed, falling back to iframe print:', err);
+    console.warn('Document write fallback failed:', err);
   }
 
-  // Fallback if popup blocked by browser
+  // 3. Fallback to iframe printer
   printViaIframe(data, width);
   return null;
 };

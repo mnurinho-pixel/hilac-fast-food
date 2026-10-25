@@ -15,44 +15,69 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+#printable-receipt {
+  display: none;
+}
+
 @media print {
   @page {
-    margin: 0;
+    margin: 0mm;
+    size: auto;
+  }
+  /* Hide the entire React application root so nothing pushes content down or creates blank pages */
+  #root {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+  /* Hide all other direct children of body except our portaled printable receipt */
+  body > *:not(#printable-receipt) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
   }
   html, body {
     background: #ffffff !important;
+    color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
     overflow: visible !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  /* The printable receipt should be the only visible element */
+  /* The printable receipt: always visible at (0,0) */
   #printable-receipt {
     display: block !important;
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    max-width: 58mm !important;
-    margin: 0 !important;
+    visibility: visible !important;
+    position: static !important;
+    margin: 0 auto !important;
     padding: 2mm 1.5mm !important;
     background: #ffffff !important;
-    z-index: 99999 !important;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace !important;
     color: #000000 !important;
     line-height: 1.25 !important;
+    box-sizing: border-box !important;
   }
   #printable-receipt.paper-80mm {
     max-width: 78mm !important;
+    width: 78mm !important;
+    font-size: 12px !important;
   }
   #printable-receipt.paper-58mm {
-    max-width: 56mm !important;
+    max-width: 54mm !important;
+    width: 54mm !important;
+    font-size: 11px !important;
   }
   #printable-receipt * {
     color: #000000 !important;
     box-shadow: none !important;
     text-shadow: none !important;
+    visibility: visible !important;
   }
 }
 
